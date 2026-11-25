@@ -1,0 +1,81 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CLIPX AI</title>
+  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
+  <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+</head>
+<body>
+  <h1>⚡ CLIPX AI</h1>
+  <h3>Video Shortener</h3>
+  <input type="file" id="video" accept="video/*">
+  <br><br>
+  <label>Start time (seconds)</label>
+  <input id="start" type="number" value="0">
+  <br><br>
+  <label>Clip duration (seconds)</label>
+  <input id="duration" type="number" value="30">
+  <br><br>
+  <button id="cut">Create Short Clip</button>
+  <p id="status">Upload a video to begin.</p>
+  <a id="download" hidden>Download clip</a>
+
+<script>
+const { FFmpeg } = FFmpegWASM;
+const { fetchFile } = FFmpegUtil;
+const ffmpeg = new FFmpeg();
+
+const status = document.getElementById('status');
+document.getElementById('cut').onclick = async () => {
+  const file = document.getElementById('video').files[0];
+  if (!file) {
+    status.textContent = 'Please upload a video first.';
+    return;
+  }
+
+  const start = Number(document.getElementById('start').value);
+  const duration = Number(document.getElementById('duration').value);
+
+  if (!Number.isFinite(start) || !Number.isFinite(duration) ||
+      start < 0 || duration <= 0) {
+    status.textContent = 'Enter valid start and duration values.';
+    return;
+  }
+
+  try {
+    status.textContent = 'Loading video engine...';
+    if (!ffmpeg.loaded) await ffmpeg.load();
+
+    status.textContent = 'Processing video...';
+    await ffmpeg.writeFile('input.mp4', await fetchFile(file));
+
+    await ffmpeg.exec([
+      '-ss', String(start),
+      '-i', 'input.mp4',
+      '-t', String(duration),
+      '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-c:a', 'aac',
+      'clip.mp4'
+    ]);
+
+    const data = await ffmpeg.readFile('clip.mp4');
+    const url = URL.createObjectURL(
+      new Blob([data.buffer], {type:'video/mp4'})
+    );
+
+    const link = document.getElementById('download');
+    link.href = url;
+    link.download = 'clipx-short.mp4';
+    link.hidden = false;
+    link.textContent = '⬇ Download your clip';
+    status.textContent = 'Your clip is ready!';
+  } catch (error) {
+    status.textContent = 'Processing failed: ' + error.message;
+  }
+};
+</script>
+</body>
+</html>
