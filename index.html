@@ -2,79 +2,92 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>CLIPX AI</title>
-  <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js"></script>
-  <script src="https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLIPX AI</title>
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<style>
+body{font-family:Arial;background:#10101b;color:white;padding:20px}
+.card{background:#202033;padding:20px;border-radius:16px;max-width:500px;margin:auto}
+h1{color:#a78bfa}
+input,button{box-sizing:border-box;width:100%;padding:13px;margin:9px 0;border-radius:9px}
+button{background:#7956ed;color:white;border:0;font-weight:bold}
+video{width:100%;margin-top:15px}
+a{color:#a78bfa}
+</style>
 </head>
 <body>
-  <h1>⚡ CLIPX AI</h1>
-  <h3>Video Shortener</h3>
-  <input type="file" id="video" accept="video/*">
-  <br><br>
-  <label>Start time (seconds)</label>
-  <input id="start" type="number" value="0">
-  <br><br>
-  <label>Clip duration (seconds)</label>
-  <input id="duration" type="number" value="30">
-  <br><br>
-  <button id="cut">Create Short Clip</button>
-  <p id="status">Upload a video to begin.</p>
-  <a id="download" hidden>Download clip</a>
+<div class="card">
+<h1>⚡ CLIPX AI</h1>
+<p>AI Video Shortener Studio</p>
+<input type="file" id="video" accept="video/*">
+<label>Start time (seconds)</label>
+<input id="start" type="number" value="0" min="0">
+<label>Clip duration (seconds)</label>
+<input id="duration" type="number" value="15" min="1">
+<button id="cut">CREATE SHORT CLIP</button>
+<p id="status">Upload a video to begin.</p>
+<video id="preview" controls hidden></video>
+<a id="download" hidden>⬇ Download your clip</a>
+</div>
 
 <script>
-const { FFmpeg } = FFmpegWASM;
-const { fetchFile } = FFmpegUtil;
-const ffmpeg = new FFmpeg();
+const {createFFmpeg,fetchFile}=FFmpeg;
+const ffmpeg=createFFmpeg({
+ log:true,
+ corePath:'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+});
 
-const status = document.getElementById('status');
-document.getElementById('cut').onclick = async () => {
-  const file = document.getElementById('video').files[0];
-  if (!file) {
-    status.textContent = 'Please upload a video first.';
-    return;
-  }
+const $=id=>document.getElementById(id);
+let outputURL=null;
 
-  const start = Number(document.getElementById('start').value);
-  const duration = Number(document.getElementById('duration').value);
+$('cut').onclick=async()=>{
+ const file=$('video').files[0];
+ const start=Number($('start').value);
+ const duration=Number($('duration').value);
 
-  if (!Number.isFinite(start) || !Number.isFinite(duration) ||
-      start < 0 || duration <= 0) {
-    status.textContent = 'Enter valid start and duration values.';
-    return;
-  }
+ if(!file){$('status').textContent='Choose a video first.';return}
+ if(!Number.isFinite(start)||!Number.isFinite(duration)||start<0||duration<=0){
+ $('status').textContent='Enter valid times.';return;
+ }
 
-  try {
-    status.textContent = 'Loading video engine...';
-    if (!ffmpeg.loaded) await ffmpeg.load();
+ const button=$('cut');
+ button.disabled=true;
 
-    status.textContent = 'Processing video...';
-    await ffmpeg.writeFile('input.mp4', await fetchFile(file));
+ try{
+  $('status').textContent='Loading video engine...';
+  if(!ffmpeg.isLoaded())await ffmpeg.load();
 
-    await ffmpeg.exec([
-      '-ss', String(start),
-      '-i', 'input.mp4',
-      '-t', String(duration),
-      '-c:v', 'libx264',
-      '-preset', 'ultrafast',
-      '-c:a', 'aac',
-      'clip.mp4'
-    ]);
+  $('status').textContent='Preparing video...';
+  const ext=(file.name.split('.').pop()||'mp4').toLowerCase().replace(/[^a-z0-9]/g,'');
+  ffmpeg.FS('writeFile','input.'+ext,await fetchFile(file));
 
-    const data = await ffmpeg.readFile('clip.mp4');
-    const url = URL.createObjectURL(
-      new Blob([data.buffer], {type:'video/mp4'})
-    );
+  $('status').textContent='Cutting your video...';
+  await ffmpeg.run(
+   '-ss',String(start),
+   '-i','input.'+ext,
+   '-t',String(duration),
+   '-c:v','libx264',
+   '-preset','ultrafast',
+   '-c:a','aac',
+   '-movflags','+faststart',
+   'clip.mp4'
+  );
 
-    const link = document.getElementById('download');
-    link.href = url;
-    link.download = 'clipx-short.mp4';
-    link.hidden = false;
-    link.textContent = '⬇ Download your clip';
-    status.textContent = 'Your clip is ready!';
-  } catch (error) {
-    status.textContent = 'Processing failed: ' + error.message;
-  }
+  const data=ffmpeg.FS('readFile','clip.mp4');
+  if(outputURL)URL.revokeObjectURL(outputURL);
+  outputURL=URL.createObjectURL(new Blob([data],{type:'video/mp4'}));
+
+  $('preview').src=outputURL;
+  $('preview').hidden=false;
+  $('download').href=outputURL;
+  $('download').download='CLIPX-short.mp4';
+  $('download').hidden=false;
+  $('status').textContent='🎉 Your clip is ready!';
+ }catch(e){
+  $('status').textContent='Error: '+e.message;
+ }finally{
+  button.disabled=false;
+ }
 };
 </script>
 </body>
